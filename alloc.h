@@ -33,6 +33,7 @@
 #include <stdint.h>
 
 #ifdef USE_LIBC_MALLOC
+#include <stdbool.h>
 #include <stdlib.h>
 bool _free(void* ptr) {
   free(ptr);
@@ -47,8 +48,12 @@ bool _free(void* ptr) {
 #define ASSERT(x)
 #endif
 
+#ifndef MAX
+#define MAX(x, y) (x > y ? x : y)
+#endif
+
 #ifndef ALLOCATOR_DEFAULT_CAP
-#define ALLOCATOR_DEFAULT_CAP (16 * 1024)
+#define ALLOCATOR_DEFAULT_CAP (4 * 1024)
 #endif
 
 typedef void* (*allocator)(size_t);
@@ -73,8 +78,10 @@ struct __alloc {
 
 page* new_page(alloc*, size_t);
 void  clear_page(alloc*, page*);
-void  create_alloc(alloc* alloc, size_t cap, allocator allocFn, deallocator freeFn);
-void  destroy_alloc(alloc* alloc);
+void  init_alloc(alloc*, size_t, allocator, deallocator);
+void* make(alloc*, size_t);
+void  destroy_alloc(alloc*);
+void  reset_alloc(alloc*);
 
 #ifdef ALLOC_IMPL
 
@@ -92,7 +99,7 @@ void clear_page(alloc* alloc, page* p) {
   ASSERT(ret);
 }
 
-void create_alloc(alloc* alloc, allocator allocFn, deallocator freeFn, size_t cap) {
+void init_alloc(alloc* alloc, size_t init_cap, allocator allocFn, deallocator freeFn) {
 #ifdef USE_LIBC_MALLOC
   alloc->allocFn = malloc;
   alloc->freeFn = _free;
@@ -101,8 +108,37 @@ void create_alloc(alloc* alloc, allocator allocFn, deallocator freeFn, size_t ca
   alloc->freeFn = freeFn;
 #endif
   ASSERT((alloc->allocFn != NULL && alloc->freeFn != NULL));
-  page* _page = new_page(alloc, cap);
+  size_t cap = MAX(ALLOCATOR_DEFAULT_CAP, init_cap);
+  page*  _page = new_page(alloc, cap);
   ASSERT((_page != NULL));
+  alloc->start = _page;
+  alloc->curr = _page;
+}
+
+void* make(alloc* alloc, size_t sz) {
+  size_t words = (sz + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
+
+  if (alloc->curr == NULL) {
+    ASSERT(alloc->start == NULL);
+    size_t cap = MAX(ALLOCATOR_DEFAULT_CAP, words);
+    alloc->curr = new_page(alloc, cap);
+    alloc->start = alloc->curr;
+  }
+
+  while (alloc->curr->fill + words > alloc->curr->cap && alloc->curr->next != NULL) {
+    alloc->curr = alloc->curr->next;
+  }
+
+  if (alloc->curr->fill + words > alloc->curr->cap) {
+    ASSERT(alloc->curr->next == NULL);
+    size_t cap = MAX(ALLOCATOR_DEFAULT_CAP, words);
+    alloc->curr->next = new_page(alloc, words);
+    alloc->curr = alloc->curr->next;
+  }
+
+  void* mem = &alloc->curr->data[alloc->curr->fill];
+  alloc->curr->fill += words;
+  return mem;
 }
 
 void destroy_alloc(alloc* alloc) {
@@ -115,6 +151,14 @@ void destroy_alloc(alloc* alloc) {
 
   alloc->start = NULL;
   alloc->curr = NULL;
+}
+
+void reset_alloc(alloc* alloc) {
+  for (page* _p0 = alloc->start; _p0 != NULL; _p0 = _p0->next) {
+    _p0->fill = 0;
+  }
+
+  alloc->curr = alloc->start;
 }
 
 #endif // ALLOC_IMPL
