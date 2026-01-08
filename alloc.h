@@ -26,6 +26,12 @@
 // OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 // EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+/**
+ *  @file alloc.h
+ *
+ *  @brief stb style library for managing memory via region based alloctor AKA Arena allocator.
+ */
+
 #ifndef _ALLOC_H
 #define _ALLOC_H
 
@@ -84,10 +90,38 @@ struct __alloc {
   deallocator freeFn;
 };
 
-ALLOCDEF void  init_alloc(alloc*, size_t, allocator, deallocator);
-ALLOCDEF void* make(alloc*, size_t);
-ALLOCDEF void  destroy_alloc(alloc*);
-ALLOCDEF void  reset_alloc(alloc*);
+/**
+ *  @brief Initialize the allocator with a memory region.
+ *
+ *  @param[in, out] alloc Pointer to the allocator instance.
+ *  @param init_cap Initial capacity for the first page. If 0, uses ALLOCATOR_DEFAULT_CAP.
+ *  @param allocFn Function pointer of the allocation function.
+ *  @param freeFn Function pointer of the deallocation function.
+ */
+ALLOCDEF void init_alloc(alloc* alloc, size_t init_cap, allocator allocFn, deallocator freeFn);
+
+/**
+ *  @brief Allocate memory from the allocator.
+ *
+ *  @param[in, out] alloc Pointer to the allocator instance.
+ *  @param sz Size of memory to allocate in bytes.
+ *  @return Returns a pointer to the allocated memory.
+ */
+ALLOCDEF void* make(alloc* alloc, size_t sz);
+
+/**
+ *  @brief Destroys the allocator instance, freeing all the pages.
+ *
+ *  @param[in, out] alloc Pointer to the allocator instance to destroy.
+ */
+ALLOCDEF void destroy_alloc(alloc*);
+
+/**
+ *  @brief Reset the allocator, clearing all allocations but keeping pages for reuse.
+ *
+ *  @param[in, out] alloc Pointer to the allocator instance to reset.
+ */
+ALLOCDEF void reset_alloc(alloc*);
 
 static page* new_page(alloc*, size_t);
 static void  clear_page(alloc*, page*);
@@ -117,7 +151,7 @@ ALLOCDEF void init_alloc(alloc* alloc, size_t init_cap, allocator allocFn, deall
   alloc->freeFn = freeFn;
 #endif
   ASSERT((alloc->allocFn != NULL && alloc->freeFn != NULL));
-  size_t cap = MAX(ALLOCATOR_DEFAULT_CAP, init_cap);
+  size_t cap = (init_cap == 0 ? ALLOCATOR_DEFAULT_CAP : init_cap);
   page*  _page = new_page(alloc, cap);
   ASSERT((_page != NULL));
   alloc->start = _page;
