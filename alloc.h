@@ -158,7 +158,6 @@ ALLOCDEF void init_alloc(alloc* alloc, size_t init_cap, allocator allocFn, deall
 #endif
   ASSERT((alloc->allocFn != NULL && alloc->freeFn != NULL));
   size_t cap = (init_cap == 0 ? ALLOCATOR_DEFAULT_CAP : init_cap);
-  size_t cap = (init_cap == 0 ? ALLOCATOR_DEFAULT_CAP : init_cap);
   page*  _page = new_page(alloc, cap);
   ASSERT((_page != NULL));
   alloc->start = _page;
