@@ -32,6 +32,14 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifndef ALLOCDEF
+#ifdef ALLOC_STATIC
+#define ALLOCDEF static
+#else
+#define ALLOCDEF
+#endif // ALLOC_STATIC
+#endif // ALLOCDEF
+
 #ifdef USE_LIBC_MALLOC
 #include <stdbool.h>
 #include <stdlib.h>
@@ -39,22 +47,22 @@ bool _free(void* ptr) {
   free(ptr);
   return true;
 }
-#endif
+#endif // USE_LIBC_MALLOC
 
 #ifdef ALLOC_DEBUG
 #include <assert.h>
 #define ASSERT(x) assert(x)
 #else
 #define ASSERT(x)
-#endif
+#endif // ALLOC_DEBUG
 
 #ifndef MAX
 #define MAX(x, y) (x > y ? x : y)
-#endif
+#endif // MAX
 
 #ifndef ALLOCATOR_DEFAULT_CAP
 #define ALLOCATOR_DEFAULT_CAP (4 * 1024)
-#endif
+#endif // ALLOCATOR_DEFAULT_CAP
 
 typedef void* (*allocator)(size_t);
 typedef bool (*deallocator)(void*);
@@ -76,16 +84,17 @@ struct __alloc {
   deallocator freeFn;
 };
 
-page* new_page(alloc*, size_t);
-void  clear_page(alloc*, page*);
-void  init_alloc(alloc*, size_t, allocator, deallocator);
-void* make(alloc*, size_t);
-void  destroy_alloc(alloc*);
-void  reset_alloc(alloc*);
+ALLOCDEF void  init_alloc(alloc*, size_t, allocator, deallocator);
+ALLOCDEF void* make(alloc*, size_t);
+ALLOCDEF void  destroy_alloc(alloc*);
+ALLOCDEF void  reset_alloc(alloc*);
+
+static page* new_page(alloc*, size_t);
+static void  clear_page(alloc*, page*);
 
 #ifdef ALLOC_IMPL
 
-page* new_page(alloc* alloc, size_t capacity) {
+static page* new_page(alloc* alloc, size_t capacity) {
   size_t actual_size = sizeof(page) + sizeof(uintptr_t) * capacity;
   page*  _page = (page*)alloc->allocFn(actual_size);
   _page->next = NULL;
@@ -94,12 +103,12 @@ page* new_page(alloc* alloc, size_t capacity) {
   return _page;
 }
 
-void clear_page(alloc* alloc, page* p) {
+static void clear_page(alloc* alloc, page* p) {
   bool ret = alloc->freeFn(p);
   ASSERT(ret);
 }
 
-void init_alloc(alloc* alloc, size_t init_cap, allocator allocFn, deallocator freeFn) {
+ALLOCDEF void init_alloc(alloc* alloc, size_t init_cap, allocator allocFn, deallocator freeFn) {
 #ifdef USE_LIBC_MALLOC
   alloc->allocFn = malloc;
   alloc->freeFn = _free;
@@ -115,7 +124,7 @@ void init_alloc(alloc* alloc, size_t init_cap, allocator allocFn, deallocator fr
   alloc->curr = _page;
 }
 
-void* make(alloc* alloc, size_t sz) {
+ALLOCDEF void* make(alloc* alloc, size_t sz) {
   size_t words = (sz + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
 
   if (alloc->curr == NULL) {
@@ -141,7 +150,7 @@ void* make(alloc* alloc, size_t sz) {
   return mem;
 }
 
-void destroy_alloc(alloc* alloc) {
+ALLOCDEF void destroy_alloc(alloc* alloc) {
   page* _page = alloc->start;
   while (_page) {
     page* save = _page;
@@ -153,7 +162,7 @@ void destroy_alloc(alloc* alloc) {
   alloc->curr = NULL;
 }
 
-void reset_alloc(alloc* alloc) {
+ALLOCDEF void reset_alloc(alloc* alloc) {
   for (page* _p0 = alloc->start; _p0 != NULL; _p0 = _p0->next) {
     _p0->fill = 0;
   }
