@@ -29,13 +29,7 @@
 /**
  *  @file alloc.h
  *
- *  @brief stb style library for managing memory via region based alloctor AKA Arena allocator.
- */
-
-/**
- *  @file alloc.h
- *
- *  @brief stb style library for managing memory via region based alloctor AKA Arena allocator.
+ *  @brief Routines for managing memory via Arena allocator.
  */
 
 #ifndef _ALLOC_H
@@ -68,10 +62,6 @@ bool _free(void* ptr) {
 #define ASSERT(x)
 #endif // ALLOC_DEBUG
 
-#ifndef MAX
-#define MAX(x, y) (x > y ? x : y)
-#endif // MAX
-
 #ifndef ALLOCATOR_DEFAULT_CAP
 #define ALLOCATOR_DEFAULT_CAP (4 * 1024)
 #endif // ALLOCATOR_DEFAULT_CAP
@@ -97,10 +87,10 @@ struct __alloc {
 };
 
 /**
- *  @brief Initialize the allocator with a memory region.
+ *  @brief Initialize the allocator with a initial size of @p init_cap.
  *
  *  @param[in, out] alloc Pointer to the allocator instance.
- *  @param init_cap Initial capacity for the first page. If 0, uses ALLOCATOR_DEFAULT_CAP.
+ *  @param init_cap Initial capacity for the first page (in MACHINE WORD(S)). If 0, uses ALLOCATOR_DEFAULT_CAP.
  *  @param allocFn Function pointer of the allocation function.
  *  @param freeFn Function pointer of the deallocation function.
  */
@@ -114,6 +104,17 @@ ALLOCDEF void init_alloc(alloc* alloc, size_t init_cap, allocator allocFn, deall
  *  @return Returns a pointer to the allocated memory.
  */
 ALLOCDEF void* make(alloc* alloc, size_t sz);
+
+/**
+ *  @brief Reallocates memory from page @p optr of size @p osz to a new page of @p nsz size.
+ *
+ *  @param[in, out] alloc Pointer to the allocator instance.
+ *  @param optr Pointer to the old memory address.
+ *  @param osz Size of the memory page pointed by @p optr.
+ *  @param nsz Size of the new page where to reallocate.
+ *  @return Returns a pointer to new memory page with size @p nsz. If @p osz >= @p nsz , @p optr is returned.
+ */
+ALLOCDEF void* remake(alloc* alloc, void* optr, size_t osz, size_t nsz);
 
 /**
  *  @brief Destroys the allocator instance, freeing all the pages.
@@ -149,6 +150,7 @@ static void clear_page(alloc* alloc, page* p) {
 }
 
 ALLOCDEF void init_alloc(alloc* alloc, size_t init_cap, allocator allocFn, deallocator freeFn) {
+
 #ifdef USE_LIBC_MALLOC
   alloc->allocFn = malloc;
   alloc->freeFn = _free;
@@ -156,6 +158,7 @@ ALLOCDEF void init_alloc(alloc* alloc, size_t init_cap, allocator allocFn, deall
   alloc->allocFn = allocFn;
   alloc->freeFn = freeFn;
 #endif
+
   ASSERT((alloc->allocFn != NULL && alloc->freeFn != NULL));
   size_t cap = (init_cap == 0 ? ALLOCATOR_DEFAULT_CAP : init_cap);
   page*  _page = new_page(alloc, cap);
@@ -165,12 +168,11 @@ ALLOCDEF void init_alloc(alloc* alloc, size_t init_cap, allocator allocFn, deall
 }
 
 ALLOCDEF void* make(alloc* alloc, size_t sz) {
-  size_t words = (sz + sizeof(uintptr_t) - 1) / sizeof(uintptr_t);
+  size_t words = (sz == 0 ? ALLOCATOR_DEFAULT_CAP : (sz + sizeof(uintptr_t) - 1) / sizeof(uintptr_t));
 
   if (alloc->curr == NULL) {
     ASSERT(alloc->start == NULL);
-    size_t cap = MAX(ALLOCATOR_DEFAULT_CAP, words);
-    alloc->curr = new_page(alloc, cap);
+    alloc->curr = new_page(alloc, words);
     alloc->start = alloc->curr;
   }
 
@@ -180,7 +182,6 @@ ALLOCDEF void* make(alloc* alloc, size_t sz) {
 
   if (alloc->curr->fill + words > alloc->curr->cap) {
     ASSERT(alloc->curr->next == NULL);
-    size_t cap = MAX(ALLOCATOR_DEFAULT_CAP, words);
     alloc->curr->next = new_page(alloc, words);
     alloc->curr = alloc->curr->next;
   }
@@ -188,6 +189,20 @@ ALLOCDEF void* make(alloc* alloc, size_t sz) {
   void* mem = &alloc->curr->data[alloc->curr->fill];
   alloc->curr->fill += words;
   return mem;
+}
+
+ALLOCDEF void* remake(alloc* alloc, void* optr, size_t osz, size_t nsz) {
+  if (osz >= nsz)
+    return optr;
+
+  void* nptr = make(alloc, nsz);
+  char* npc = (char*)nptr;
+  char* opc = (char*)optr;
+  for (size_t x = 0; x < osz; ++x) {
+    npc[i] = opc[i];
+  }
+
+  return nptr;
 }
 
 ALLOCDEF void destroy_alloc(alloc* alloc) {
